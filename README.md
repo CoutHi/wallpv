@@ -25,6 +25,13 @@ folder = /home/couthi/Pictures/gif-wall/
 
 ## inside ~/.config/wallpv/wallpv.ini
 
+## TODO
+* Roadmap
+	+ Static Images With Swww for memory efficiency
+	+ File Type Indication
+	+ A More Efficient Way Of Caching/Displaying
+	+ Multiple Source Folder Support
+
 ### Screenshot(s)
 
 ![Screenshot](./wallpv.png)
