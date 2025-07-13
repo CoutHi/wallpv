@@ -16,5 +16,13 @@ After editing the config for your needs, simply run the program, first startup m
 
 I've done basically zero testing so far so I have no clue how python dependencies are handled, (should I for example upload the venv as well?), so I hope it works out on your end until I figure all this out.
 
+## The Config Should Look Like This:
+
+```
+[Path]
+folder = /home/couthi/Pictures/gif-wall/
+```
+
+inside ~/.config/wallpv/wallpv.ini
 
 ![Screenshot](./wallpv.png)
