@@ -23,6 +23,8 @@ I've done basically zero testing so far so I have no clue how python dependencie
 folder = /home/couthi/Pictures/gif-wall/
 ```
 
-inside ~/.config/wallpv/wallpv.ini
+## inside ~/.config/wallpv/wallpv.ini
+
+### Screenshot(s)
 
 ![Screenshot](./wallpv.png)
