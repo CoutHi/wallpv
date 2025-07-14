@@ -1,13 +1,20 @@
+from enum import Enum
 import sys
 import argparse
-# from PIL import Image
 import os
-from gi.repository import Gtk, GdkPixbuf, Gdk
-import subprocess
-import xdg.BaseDirectory
 import configparser
+import xdg.BaseDirectory
+import subprocess
+from gi.repository import Gtk, GdkPixbuf, Gdk
 import gi
 gi.require_version("Gtk", "4.0")
+
+
+class ErrorId(Enum):
+    PERSISTENCE = 1
+    CONFIG_EMPTY = 2
+    FFMPEG = 3
+
 
 WIDTH = 1408
 HEIGHT = 792
@@ -44,7 +51,7 @@ def on_activate(app):
     grid.set_column_homogeneous(True)
 
     # Read the config for the folder to check for gifs
-    img_folder = read_conf()
+    img_folder = read_conf(win)
     print("IMAGE FOLDER: " + img_folder)
 
     # an array for storing the names of gif files found in the folder
@@ -56,20 +63,7 @@ def on_activate(app):
             gif_files.append(file)
 
     # create thumbnails from the gifs we found so we can display them in the UI
-    cached_files, err = create_thumbnails(img_folder, gif_files)
-
-    if err:
-        err_text = Gtk.Label.new("FAILED TO CREATE CACHE")
-        err_btn = Gtk.Button.new_with_label("EXIT")
-        err_btn.connect('clicked', lambda x: win.close())
-
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-
-        box.append(err_text)
-        box.append(err_btn)
-
-        win.set_child(box)
-        win.present()
+    cached_files, err = create_thumbnails(win, img_folder, gif_files)
 
     row = 0
     column = 0
@@ -84,7 +78,7 @@ def on_activate(app):
 
         image = Gtk.Image.new_from_file(cached_files[i])
 
-        image.set_pixel_size(WIDTH/columns_per_row - 8)
+        image.set_pixel_size(int(WIDTH/columns_per_row - 8))
 
         image.get_style_context().add_class("image")
 
@@ -100,7 +94,8 @@ def on_activate(app):
         # simple css to get rid of button's padding and stuff
         button.get_style_context().add_class("thumbnail")
 
-        button.connect('clicked', set_wallpaper, cached_files[i], img_folder)
+        button.connect('clicked', set_wallpaper, win,
+                       cached_files[i], img_folder)
 
         button.set_child(image)
 
@@ -127,7 +122,7 @@ def on_activate(app):
     win.present()
 
 
-def read_conf() -> str:
+def read_conf(win) -> str:
 
     # the config file should be /home/user/.config/wallpv/wallpv.ini
     config_file = os.path.join(
@@ -140,10 +135,14 @@ def read_conf() -> str:
     path_conf = config['Path']
     img_folder = path_conf['folder']
 
+    if img_folder is None or img_folder == "":
+        raise_ui_error(ErrorId.CONFIG_EMPTY, win,
+                       "CONFIG ERROR\nConfig Is Empty")
+
     return img_folder
 
 
-def create_thumbnails(gif_path, gifs) -> tuple[list[str], str | None]:
+def create_thumbnails(win, gif_path, gifs) -> tuple[list[str], str | None]:
 
     # cache path should be /home/user/.cache/wallpv
     cache_path = os.path.join(xdg.BaseDirectory.xdg_cache_home, "wallpv")
@@ -180,7 +179,8 @@ def create_thumbnails(gif_path, gifs) -> tuple[list[str], str | None]:
 
             if result.returncode != 0:
                 print("ERROR WITH FFMPEGTHUMBNAILER " + result.stderr.decode())
-                exit(1)
+                raise_ui_error(
+                    ErrorId.FFMPEG, win, "ERROR WITH FFMPEGTHUMBNAILER\n" + result.stderr.decode())
         else:
             print("THUMBNAIL ALREADY EXISTS: " + str(file_path))
 
@@ -190,7 +190,12 @@ def create_thumbnails(gif_path, gifs) -> tuple[list[str], str | None]:
     return cache_files, None
 
 
-def set_wallpaper(caller, file, gif_folder):
+def set_wallpaper(caller, win, file, gif_folder):
+
+    config_dir = os.path.join(xdg.BaseDirectory.xdg_config_home, "wallpv")
+
+    # the user can use the persistence_file, which has the full path to the chosen wallpaper in their window manager config to set the wallpaper at start-up, so their choice
+    # is persistent across reboots
 
     print("FUNCTION SET_WALLPAPER() GOT FILE : " + str(file))
     file_string = str(file)
@@ -221,6 +226,15 @@ def set_wallpaper(caller, file, gif_folder):
     except ChildProcessError:
         print("ERROR RUNNING MPVPAPER!\nCODE: " + str(result.returncode))
 
+    try:
+        persistence_file = open(os.path.join(config_dir, "wallpaper.txt"), "w")
+        persistence_file.write(full_path)
+        persistence_file.close()
+    except Exception as e:
+        print("ERROR OPENING WALLPAPER PERSISTENCE FILE: " + str(e))
+        e = "ERROR OPENING WALLPAPER PERSISTENCE FILE\n" + str(e)
+        raise_ui_error(ErrorId.PERSISTENCE, win, e)
+
 
 # I haven't figured out how to call these yet
 def hover_button(caller, img):
@@ -228,7 +242,58 @@ def hover_button(caller, img):
 
 
 def hover_button_leave(caller, img, columns):
-    img.set_pixel_size(WIDTH/columns)
+    img.set_pixel_size(int(WIDTH/columns))
+
+
+def raise_ui_error(error_id, win: Gtk.ApplicationWindow, err):
+
+    print("ENTERING RAISE_UI_ERROR()")
+
+    alert = Gtk.Window(application=win.get_application(),
+                       transient_for=win, modal=True, title="Error")
+
+    viewbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL,
+                      spacing=48, hexpand=True, vexpand=True)
+
+    err_text = Gtk.Label(hexpand=True, vexpand=False, margin_top=24)
+
+    err_text.set_markup("<b>An Error Occured</b>")
+
+    err_text.set_halign(Gtk.Align.CENTER)
+
+    info_text = Gtk.TextView(editable=False, indent=12,
+                             monospace=True, can_target=False,
+                             hexpand=True, vexpand=True,
+                             margin_end=36, margin_start=36,
+                             justification=Gtk.Justification.CENTER,
+                             pixels_above_lines=12, cursor_visible=False)
+
+    err_buffer = Gtk.TextBuffer(text=str(err))
+
+    info_text.set_buffer(err_buffer)
+
+    exit_btn = Gtk.Button.new_with_label("OK")
+
+    def on_close(caller):
+        if ErrorId.FFMPEG or ErrorId.CONFIG_EMPTY:
+            alert.close()
+            win.get_application().quit()
+            sys.exit(1)
+        else:
+            return
+
+    exit_btn.connect('clicked', on_close)
+
+    viewbox.append(err_text)
+    viewbox.append(info_text)
+    viewbox.append(exit_btn)
+
+    alert.set_default_size(1024, 512)
+    alert.set_resizable(False)
+
+    alert.set_child(viewbox)
+
+    alert.present()
 
 
 app = Gtk.Application(application_id='dev.couthi.wallpv')
