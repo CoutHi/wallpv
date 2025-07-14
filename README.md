@@ -9,7 +9,7 @@ I am very new to Python programming (basically learned everything while coding t
 #### You Will need ffmpegthumbnailer and mpvpaper installed!
 
 ## Changelog
-[inline link](/CHANGELOG.md)
+[CHANGELOG.md](/CHANGELOG.md)
 
 ## How it works:
 
