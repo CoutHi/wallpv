@@ -8,13 +8,16 @@ I am very new to Python programming (basically learned everything while coding t
 
 #### You Will need ffmpegthumbnailer and mpvpaper installed!
 
+## Changelog
+[inline link](/CHANGELOG.md)
+
 ## How it works:
 
 You can edit the ~/.config/wallpv/wallpv.ini file to point to the folder where you store your gifs/mp4s (these currently the only accepted file types).
 
 After editing the config for your needs, simply run the program, first startup might take while since it'll generate thumbnails for all the gifs and mp4s it finds and put them in ~/.cache/wallpv, afterwards all you need to do is selecting the wallpaper you want!
 
-I've done basically zero testing so far so I have no clue how python dependencies are handled, (should I for example upload the venv as well?), so I hope it works out on your end until I figure all this out.
+The GUI will create a file called wallpaper.txt in ~/.config/wallpv which will contain the path to your chosen wallpaper, you can use this file to modify however you launch mpvpaper in your desktop for the first time to point to the wallpaper you have chosen.
 
 ## The Config Should Look Like This:
 
