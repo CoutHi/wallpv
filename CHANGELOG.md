@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## Commit fe0b1bcf410588370191d3e1f46d51d949ee368b
++ Static image support!!
++ File type indicator (video, image, gif)
++ Resolution indicator
++ Support for video files that aren't mp4!!
++ More error pop ups (Cache errors, mpvpaper errors)
+
 ## Commit 7238d178d65ae601e747facffb887483ddb53e35
 
 ### Highlights
