@@ -34,6 +34,9 @@ folder = /home/couthi/Pictures/gif-wall/
 	+ A More Efficient Way Of Caching/Displaying
 	+ Multiple Source Folder Support
 	+ Some Optimization Is Needed 
+	+ Dependency reduction
+	+ File deletion 
+	+ Gif conversion
 
 ### Screenshot(s)
 
