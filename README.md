@@ -37,6 +37,7 @@ folder = /home/couthi/Pictures/gif-wall/
 	+ Dependency reduction
 	+ File deletion 
 	+ Gif conversion
+	+ Move the backend away from python for performance
 
 ### Screenshot(s)
 

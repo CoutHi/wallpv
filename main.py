@@ -1,5 +1,4 @@
 import cv2
-from PIL import Image
 from gi.repository import Gtk, Gdk, GdkPixbuf
 from enum import Enum
 import sys
@@ -19,6 +18,7 @@ class ErrorId(Enum):
     CACHE_NO_PERMS = 4
     CACHE_EXCEPTION = 5
     MPVPAPER = 6
+    WRONG_CONFIG_FOLDER = 7
 
 
 WIDTH = 1408
@@ -73,6 +73,13 @@ def on_activate(app):
     wallpaper_files = []
 
     prepared_files = []
+
+    # Check if the wallpaper folder in the config is correct
+    try:
+        os.listdir(img_folder)
+    except FileNotFoundError as e:
+        raise_ui_error(ErrorId.WRONG_CONFIG_FOLDER, win,
+                       "WALLPAPER FOLDER IS INCORRECT\n" + str(e) + "\nERROR CODE " + str(e.errno))
 
     # check the mimetype of files in the wallpaper folder and append them to the list if they're either a video or an image file
     for file in os.listdir(img_folder):
@@ -157,15 +164,18 @@ def on_activate(app):
             filetype = "image"
             # Here we're working with pixel buffers to force the 1:1
             # aspect ratio, since we don't have ffmpegthumbnailer for normal images
-            pixel_buffer = GdkPixbuf.Pixbuf.new_from_file_at_scale(
-                path_to_wallpaper, WIDTH/4, WIDTH/4, False)
-            image = Gtk.Image.new_from_pixbuf(pixel_buffer)
+            try:
+                pixel_buffer = GdkPixbuf.Pixbuf.new_from_file_at_scale(
+                    path_to_wallpaper, WIDTH/4, WIDTH/4, False)
+                image = Gtk.Image.new_from_pixbuf(pixel_buffer)
+            except Exception:
+                print("FAILED LOADING IMAGE " + path_to_wallpaper)
+                i += 1
+                continue
 
             resolution = cv2.imread(path_to_wallpaper)
             resolutionX = int(resolution.shape[1])
             resolutionY = int(resolution.shape[0])
-
-            print(resolutionX + resolutionY)
 
         image.add_css_class("image")
 
