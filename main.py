@@ -1,11 +1,13 @@
+import cv2
+from PIL import Image
+from gi.repository import Gtk, Gdk, GdkPixbuf
 from enum import Enum
 import sys
-import argparse
 import os
 import configparser
 import xdg.BaseDirectory
 import subprocess
-from gi.repository import Gtk, GdkPixbuf, Gdk
+import mimetypes
 import gi
 gi.require_version("Gtk", "4.0")
 
@@ -14,6 +16,9 @@ class ErrorId(Enum):
     PERSISTENCE = 1
     CONFIG_EMPTY = 2
     FFMPEG = 3
+    CACHE_NO_PERMS = 4
+    CACHE_EXCEPTION = 5
+    MPVPAPER = 6
 
 
 WIDTH = 1408
@@ -40,7 +45,63 @@ Gtk.StyleContext.add_provider_for_display(
 def on_activate(app):
 
     win = Gtk.ApplicationWindow(application=app)
+    print("WINDOW MADE")
 
+    # cache path should be /home/user/.cache/wallpv
+    cache_path = os.path.join(xdg.BaseDirectory.xdg_cache_home, "wallpv")
+    print("CACHE PATH: ", cache_path)
+
+    try:
+        os.mkdir(cache_path)
+    except FileExistsError:
+        print("Cache directory exists, continuing normally.\n")
+    except PermissionError:
+        raise_ui_error(ErrorId.CACHE_NO_PERMS,
+                       "YOU DONT HAVE THE PERMISSIONS TO CREATE THE CACHE DIRECTORY IN " + cache_path)
+    except Exception:
+        raise_ui_error(ErrorId.CACHE_EXCEPTION,
+                       "EXCEPTION WHILE CREATING CACHE IN " + cache_path)
+
+    # Read the config for the folder to check for gifs
+    img_folder, err, config_file = read_conf(win)
+    if err:
+        raise_ui_error(ErrorId.CONFIG_EMPTY, win,
+                       "YOU DONT HAVE A CONFIG FILE " + "(" + config_file + ")")
+    print("IMAGE FOLDER: " + img_folder + "\n")
+
+    # an array for storing the names of files found in the folder
+    wallpaper_files = []
+
+    prepared_files = []
+
+    # check the mimetype of files in the wallpaper folder and append them to the list if they're either a video or an image file
+    for file in os.listdir(img_folder):
+        mimetype, _ = mimetypes.guess_file_type(file)
+        if mimetype:
+            type_name, _ = str(mimetype).split('/', 1)
+            if type_name == "image" or type_name == "video":
+                wallpaper_files.append(file)
+
+    # create thumbnails from the gifs/videos we found so we can display them in the UI
+    for file in wallpaper_files:
+
+        mimetype_first_part, _ = mimetypes.guess_file_type(
+            file)
+
+        if "video" in mimetype_first_part or mimetypes.guess_file_type(file)[0] == "image/gif":
+            print("FILE IS ANIMATED: " + file +
+                  " A THUMBNAIL WILL BE GENERATED")
+
+            res, err = create_thumbnails(win, file, cache_path)
+            if err is None:
+                prepared_files.append(res)
+            elif err is ErrorId.FFMPEG:
+                raise_ui_error(
+                    err, win, "FFMPEG RAN INTO AN ISSUE WHILE CREATING THUMBNAILS")
+        else:
+            prepared_files.append(os.path.join(img_folder, file))
+
+    # Start setting up the UI
     grid = Gtk.Grid.new()
     grid.set_row_spacing(0)
     grid.set_column_spacing(0)
@@ -50,37 +111,71 @@ def on_activate(app):
     grid.set_margin_end(4)
     grid.set_column_homogeneous(True)
 
-    # Read the config for the folder to check for gifs
-    img_folder = read_conf(win)
-    print("IMAGE FOLDER: " + img_folder)
-
-    # an array for storing the names of gif files found in the folder
-    gif_files = []
-
-    # find and append gif files in the img_folder
-    for file in os.listdir(img_folder):
-        if file.endswith(".gif") or file.endswith(".mp4"):
-            gif_files.append(file)
-
-    # create thumbnails from the gifs we found so we can display them in the UI
-    cached_files, err = create_thumbnails(win, img_folder, gif_files)
-
     row = 0
     column = 0
     i = 0
     columns_per_row = 4
 
+    print("\n")
     # a loop to fill the grid with the thumbnails we made, put into buttons
-    while i < len(cached_files):
+    while i < len(prepared_files):
         if column == columns_per_row:
             column = 0
             row += 1
 
-        image = Gtk.Image.new_from_file(cached_files[i])
+        # Here we get the name of the file to check against the cache in order to
+        # see if it was a gif/video, if it isn't in the cache than it's a normal image
+        file_name = os.path.basename(prepared_files[i])
 
-        image.set_pixel_size(int(WIDTH/columns_per_row - 8))
+        # This will be used to set the wallpaper path
+        path_to_wallpaper: str
 
-        image.get_style_context().add_class("image")
+        if os.path.isfile(os.path.join(cache_path, file_name)):
+
+            image = Gtk.Image(file=prepared_files[i])
+            for file in wallpaper_files:
+                file, extension = file.rsplit('.', 1)
+                if file.__contains__(file_name.removesuffix(".jpg")):
+                    path_to_wallpaper = os.path.join(
+                        img_folder, file + "." + extension)
+
+                    resolution = cv2.VideoCapture(path_to_wallpaper)
+                    resolutionX = int(resolution.get(cv2.CAP_PROP_FRAME_WIDTH))
+                    resolutionY = int(resolution.get(
+                        cv2.CAP_PROP_FRAME_HEIGHT))
+
+            image.set_pixel_size(int(WIDTH/columns_per_row - 8))
+            filetype = prepared_files[i].rsplit('/', 1)
+            file_name = filetype[1].removesuffix(".jpg")
+            if file_name + ".gif" in wallpaper_files:
+                filetype = "gif"
+            else:
+                filetype = "video"
+
+        else:
+            path_to_wallpaper = os.path.join(img_folder, file_name)
+            filetype = "image"
+            # Here we're working with pixel buffers to force the 1:1
+            # aspect ratio, since we don't have ffmpegthumbnailer for normal images
+            pixel_buffer = GdkPixbuf.Pixbuf.new_from_file_at_scale(
+                path_to_wallpaper, WIDTH/4, WIDTH/4, False)
+            image = Gtk.Image.new_from_pixbuf(pixel_buffer)
+
+            resolution = cv2.imread(path_to_wallpaper)
+            resolutionX = int(resolution.shape[1])
+            resolutionY = int(resolution.shape[0])
+
+            print(resolutionX + resolutionY)
+
+        image.add_css_class("image")
+
+        info_label = Gtk.Label(
+            justify=Gtk.Justification.CENTER)
+        info_label.set_text(
+            filetype + " [" + str(resolutionX) + "x" + str(resolutionY) + "]")
+
+        info_label.set_margin_bottom(4)
+        info_label.set_margin_top(4)
 
         button = Gtk.Button.new()
         button.set_hexpand(False)
@@ -91,15 +186,22 @@ def on_activate(app):
         button.set_margin_start(0)
         button.set_margin_top(0)
 
-        # simple css to get rid of button's padding and stuff
-        button.get_style_context().add_class("thumbnail")
+        image.set_pixel_size(WIDTH/4)
+
+        # simple css class to get rid of button's padding and stuff
+        button.add_css_class("thumbnail")
 
         button.connect('clicked', set_wallpaper, win,
-                       cached_files[i], img_folder)
+                       path_to_wallpaper)
 
         button.set_child(image)
 
-        grid.attach(button, column, row, 1, 1)
+        # This grid will contain the image, the button and the filetype label
+        display_grid = Gtk.Grid()
+        display_grid.attach(button, 0, 0, 1, 1)
+        display_grid.attach(info_label, 0, 1, 1, 1)
+
+        grid.attach(display_grid, column, row, 1, 1)
 
         column += 1
         i += 1
@@ -122,7 +224,7 @@ def on_activate(app):
     win.present()
 
 
-def read_conf(win) -> str:
+def read_conf(win) -> tuple[str, ErrorId | None, str]:
 
     # the config file should be /home/user/.config/wallpv/wallpv.ini
     config_file = os.path.join(
@@ -136,61 +238,34 @@ def read_conf(win) -> str:
     img_folder = path_conf['folder']
 
     if img_folder is None or img_folder == "":
-        raise_ui_error(ErrorId.CONFIG_EMPTY, win,
-                       "CONFIG ERROR\nConfig Is Empty")
+        return [None, ErrorId.CONFIG_EMPTY, config_file]
 
-    return img_folder
-
-
-def create_thumbnails(win, gif_path, gifs) -> tuple[list[str], str | None]:
-
-    # cache path should be /home/user/.cache/wallpv
-    cache_path = os.path.join(xdg.BaseDirectory.xdg_cache_home, "wallpv")
-    print("CACHE PATH: ", cache_path)
-
-    try:
-        os.mkdir(cache_path)
-    except FileExistsError:
-        print("Cache directory exists, continuing normally.")
-    except PermissionError:
-        err_msg = "You Don't Have The Permissions Necessary To Create" + cache_path + "!"
-        return [], err_msg
-    except Exception as e:
-        err_msg = "Exception Occured! " + e
-        return [], err_msg
-
-    # a string array for storing the path of cached files
-    cache_files = []
-
-    for gif in gifs:
-        if gif.endswith(".gif"):
-            filename = gif.removesuffix(".gif")
-        else:
-            filename = gif.removesuffix(".mp4")
-        file_path = cache_path + "/" + filename + ".jpg"
-        gif_path_full = os.path.join(gif_path, gif)
-#        Image.open(os.path.join(gif_path, gif)).convert('RGB').save(filename)
-
-        # Generate Thumbnails with ffmpegthumbnailer -- Skip if the thumbnail already exists
-        if not os.path.isfile(file_path):
-            result = subprocess.run(["ffmpegthumbnailer", "-i", gif_path_full,
-                                    "-s", str(WIDTH/4), "-c", "jpeg", "-a",  "-q", "5", "-o", file_path],   check=True)
-            print("FFMPEGTHUMBNAILER EXITED WITH: " + str(result.returncode))
-
-            if result.returncode != 0:
-                print("ERROR WITH FFMPEGTHUMBNAILER " + result.stderr.decode())
-                raise_ui_error(
-                    ErrorId.FFMPEG, win, "ERROR WITH FFMPEGTHUMBNAILER\n" + result.stderr.decode())
-        else:
-            print("THUMBNAIL ALREADY EXISTS: " + str(file_path))
-
-        cache_files.append(file_path)
-
-    # now we return an array of strings that contain individual paths to our generated thumbnails
-    return cache_files, None
+    return [img_folder, None, None]
 
 
-def set_wallpaper(caller, win, file, gif_folder):
+def create_thumbnails(win, file_to_convert, cache_path) -> tuple[str, ErrorId | None]:
+    # remove the file extension
+    filename, _ = file_to_convert.rsplit('.', 1)
+
+    file_path = cache_path + "/" + filename + ".jpg"
+
+    # Generate Thumbnails with ffmpegthumbnailer -- Skip if the thumbnail already exists
+    if not os.path.isfile(file_path):
+        result = subprocess.run(["ffmpegthumbnailer", "-i", file_to_convert,
+                                "-s", str(WIDTH/4), "-c", "jpeg", "-a",  "-q", "5", "-o", file_path],   check=True)
+        print("FFMPEGTHUMBNAILER EXITED WITH: " + str(result.returncode))
+
+        if result.returncode != 0:
+            print("ERROR WITH FFMPEGTHUMBNAILER " + result.stderr.decode())
+            return [None, ErrorId.FFMPEG]
+    else:
+        print("THUMBNAIL ALREADY EXISTS: " + str(file_path))
+        return [file_path, None]
+
+    return tuple[file_path, None]
+
+
+def set_wallpaper(caller, win, file):
 
     config_dir = os.path.join(xdg.BaseDirectory.xdg_config_home, "wallpv")
 
@@ -204,31 +279,23 @@ def set_wallpaper(caller, win, file, gif_folder):
     bare_file = os.path.basename(file_string)
     print("BARE FILE NAME :" + bare_file)
 
-    full_path = os.path.join(gif_folder, bare_file)
-
-    if os.path.isfile(full_path + ".gif"):
-        full_path = full_path + ".gif"
-    elif os.path.isfile(full_path + ".mp4"):
-        full_path = full_path + ".mp4"
-    else:
-        print("FILE COULD NOT BE FOUND!")
-        exit(1)
-
-    print("FULL PATH TO FILE: " + full_path)
+    print("FULL PATH TO FILE: " + file)
 
     subprocess.run(["pkill", "mpvpaper"])
 
-    cmd = "mpvpaper ALL -f -o \"loop no-audio\"" + " " + full_path
+    cmd = "mpvpaper ALL -f -o \"loop no-audio\"" + " " + file
     print("COMMAND: " + cmd)
     try:
         result = subprocess.run(
             cmd, check=True, shell=True)
     except ChildProcessError:
         print("ERROR RUNNING MPVPAPER!\nCODE: " + str(result.returncode))
+        raise_ui_error(ErrorId.MPVPAPER, win,
+                       "ERROR RUNNING MPVPAPER!\nCODE: " + str(result.returncode))
 
     try:
         persistence_file = open(os.path.join(config_dir, "wallpaper.txt"), "w")
-        persistence_file.write(full_path)
+        persistence_file.write(file)
         persistence_file.close()
     except Exception as e:
         print("ERROR OPENING WALLPAPER PERSISTENCE FILE: " + str(e))
@@ -275,7 +342,7 @@ def raise_ui_error(error_id, win: Gtk.ApplicationWindow, err):
     exit_btn = Gtk.Button.new_with_label("OK")
 
     def on_close(caller):
-        if ErrorId.FFMPEG or ErrorId.CONFIG_EMPTY:
+        if ErrorId.FFMPEG or ErrorId.CONFIG_EMPTY or ErrorId.CACHE_NO_PERMS or ErrorId.CACHE_EXCEPTION or ErrorId.MPVPAPER:
             alert.close()
             win.get_application().quit()
             sys.exit(1)
@@ -296,6 +363,14 @@ def raise_ui_error(error_id, win: Gtk.ApplicationWindow, err):
     alert.present()
 
 
-app = Gtk.Application(application_id='dev.couthi.wallpv')
-app.connect('activate', on_activate)
-app.run(sys.argv)
+if __name__ == '__main__':
+    app = Gtk.Application(application_id='dev.couthi.wallpv')
+    app.connect('activate', on_activate)
+    print("CONNECTED APP TO ON_ACTIVATE")
+    try:
+        print("TRYING APP.RUN")
+        sys.exit(app.run(sys.argv))
+        print("APP.RUN DONE")
+    except Exception as e:
+        print(e)
+        sys.exit(1)

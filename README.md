@@ -6,7 +6,7 @@ I was annoyed by having to change my wallpaper, for which I use mpvpaper, manual
 
 I am very new to Python programming (basically learned everything while coding this), so I'd appreciate any tips and tricks on how to best distribute this program to users.
 
-#### You Will need ffmpegthumbnailer and mpvpaper installed!
+#### You Will need ffmpegthumbnailer, python-opencv and mpvpaper installed!
 
 ## Changelog
 [CHANGELOG.md](/CHANGELOG.md)
@@ -30,10 +30,10 @@ folder = /home/couthi/Pictures/gif-wall/
 
 ## TODO
 * Roadmap
-	+ Static Images With Swww for memory efficiency
-	+ File Type Indication
+	+ Static Images With Swww or similar for memory efficiency
 	+ A More Efficient Way Of Caching/Displaying
 	+ Multiple Source Folder Support
+	+ Some Optimization Is Needed 
 
 ### Screenshot(s)
 
