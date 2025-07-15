@@ -40,4 +40,4 @@ folder = /home/couthi/Pictures/gif-wall/
 
 ### Screenshot(s)
 
-![Screenshot](./wallpv.png)
+![Screenshot](./ui.png)
