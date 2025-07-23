@@ -19,3 +19,7 @@ wallpv
 # Misc
 *.log
 
+wallpapers.txt
+cachefiles.txt
+
+.cache
