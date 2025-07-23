@@ -1,0 +1,21 @@
+# Build artifacts
+CMakeCache.txt
+cmake_install.cmake
+cachefiles.txt
+compile_commands.json
+
+# CMake-generated dirs
+CMakeFiles/
+build/
+
+# Make artifacts
+*.o
+*.so
+*.a
+
+# Executable
+wallpv
+
+# Misc
+*.log
+
