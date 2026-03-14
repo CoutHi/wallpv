@@ -1,6 +1,10 @@
 # A GUI FOR MPVPAPER WRITTEN IN GTK
 ![screenshot](./ui.png)
 
+## NOTICE
+I don't have the time to work on my hobby projects nowadays and this one has gone quite stale. In it's current state it isn't
+functional. I will update this README should that change and it becomes usable again.
+
 ## Usage
 To get started with wallpv, you'll need a config file, which should be in:
 ```
